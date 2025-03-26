@@ -1,45 +1,34 @@
-from django.shortcuts import render,redirect
+import yt_dlp
+from django.shortcuts import render
+from django.http import JsonResponse
 
-# Create your views here.
-from django.views.generic import View
-from pytube import YouTube
-import re
+def home(request):
+    return render(request, 'downloader/index.html')
 
+def get_video_formats(request):
+    """Fetch available resolutions with minimal processing."""
+    url = request.GET.get("url")
+    if not url:
+        return JsonResponse({"error": "No URL provided"}, status=400)
 
+    ydl_opts = {
+        'quiet': True,
+        'extract_flat': False
+    }
 
-class home(View):
-    def __init__(self,url=None):
-        self.url = url
-    def get(self,request):
-        return render(request,'home.html')
-    
-
-    def post(self,request):
-        # for fetching the video
-        if request.POST.get('fetch-vid'):
-            self.url = request.POST.get('given_url')
-            video = YouTube(self.url)
-            info=video.vid_info
-            info2=video.streaming_data
-            vidTitle,vidThumbnail = re.sub(r"(\W+)(\d+)", "",video.title),video.thumbnail_url
-            if "streamingData" in info:
-                format=info["streamingData"]
-                context = {'vidTitle':re.sub(r"\|","_",vidTitle).lstrip(),'vidThumbnail':vidThumbnail,'stream':format['formats'],
-                            'url':self.url}
-                return render(request,'home.html',context)
-            else:
-                context = {'vidTitle':re.sub(r"\|","_",vidTitle).lstrip(),'vidThumbnail':vidThumbnail,'stream':info2['formats'],
-                            'url':self.url}
-                return render(request,'home.html',context)
-
-
-        # for downloading the video
-        elif request.POST.get('download-vid'):
-            self.url = request.POST.get('given_url')
-            video = YouTube(self.url)
-            stream = [x for x in video.streams.filter(progressive=True)]
-            video_qual = video.streams[int(request.POST.get('download-vid')) - 1]
-            video_qual.download(output_path='../../Downloads')
-            return redirect('home')
-
-        return render(request,'home.html')
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        try:
+            info = ydl.extract_info(url, download=False)
+            formats = [
+                {
+                    "format_id": f["format_id"],
+                    "resolution": f.get("resolution", "audio"),
+                    "ext": f["ext"],
+                    "url": f["url"]  # Direct YouTube URL for client-side download
+                }
+                for f in info.get("formats", [])
+                if f.get("resolution") or f["ext"] == "mp4"
+            ]
+            return JsonResponse({"formats": formats})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
