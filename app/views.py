@@ -3,7 +3,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 
 def home(request):
-    return render(request, 'downloader/index.html')
+    return render(request, 'home.html')
 
 def get_video_formats(request):
     """Fetch available resolutions with minimal processing."""
